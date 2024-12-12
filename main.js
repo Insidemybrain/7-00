@@ -1,204 +1,121 @@
 import * as THREE from 'three';
-import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { RectAreaLightHelper } from 'three/addons/helpers/RectAreaLightHelper.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { environmentSetup } from './environment';
+import Stats from 'three/examples/jsm/libs/stats.module'
+import ImmersiveControls from '@depasquale/three-immersive-controls';
 
-let camera, scene, renderer, controls, logo;
+let camera, scene, renderer, hallway, stats;
 
 const objects = [];
 
 let raycaster;
 
-let moveForward = false;
-let moveBackward = false;
-let moveLeft = false;
-let moveRight = false;
-let canJump = false;
-
-let prevTime = performance.now();
-const velocity = new THREE.Vector3();
-const direction = new THREE.Vector3();
-const vertex = new THREE.Vector3();
-const color = new THREE.Color();
 const loader = new GLTFLoader();
+const playerHeight = 1.6;
 
 init();
 
 function init() {
-    // === Configuration de la caméra ===
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1000);
-    camera.position.y = 10;
+  stats = Stats()
+  document.body.appendChild(stats.dom)
 
-    // === Création de la scène ===
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color( 0xffffff );
-    scene.fog = new THREE.Fog(0x000000, 0, 750);
+  // === Configuration de la caméra ===
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 200);
+  camera.position.y = playerHeight;
 
-     // === Éclairage ===
-    const ambientLight = new THREE.AmbientLight(0x404040, 2); // Lumière ambiante
-    scene.add(ambientLight);
+  // === Création de la scène ===
+  scene = new THREE.Scene();
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 2); // Lumière directionnelle
-    directionalLight.position.set(0, 0, -5); // Position de la lumière
-    scene.add(directionalLight);
-    const light = new THREE.HemisphereLight( 0xeeeeff, 0x777788, 2.5 );
-				light.position.set( 0.5, 1, 0.75 );
-				scene.add( light );
-        
-// Le sol
-let floorGeometry = new THREE.PlaneGeometry(2000, 2000, 100, 100);
-floorGeometry.rotateX(-Math.PI / 2);
-
-// vertex displacement
-let position = floorGeometry.attributes.position;
-const vertex = new THREE.Vector3();
-
-for (let i = 0, l = position.count; i < l; i++) {
-  vertex.fromBufferAttribute(position, i);
-
-  // Déplacement aléatoire sur X et Z, mais pas sur Y
-  vertex.x += Math.random() * 20 - 10;
-  vertex.z += Math.random() * 20 - 10;
-
-  // La coordonnée Y reste constante, pour ne pas déformer l'horizon
-  vertex.y = 0; 
-
-  position.setXYZ(i, vertex.x, vertex.y, vertex.z);
-}
-
-floorGeometry = floorGeometry.toNonIndexed(); // ensure each face has unique vertices
-
-// Remplacer la couleur du sol par un noir uni
-const floorMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 }); // Sol noir
-
-const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-scene.add(floor);
-
-
-    // === PointerLockControls ===
-    controls = new PointerLockControls( camera, document.body );
-    const blocker = document.getElementById( 'blocker' );
-				const instructions = document.getElementById( 'instructions' );
-
-				blocker.addEventListener( 'click', function () {
-
-					controls.lock();
-
-				} );
-
-				controls.addEventListener( 'lock', function () {
-
-					instructions.style.display = 'none';
-					blocker.style.display = 'none';
-
-				} );
-
-				controls.addEventListener( 'unlock', function () {
-
-					blocker.style.display = 'block';
-					instructions.style.display = '';
-
-				} );
-
-				scene.add( controls.object );
-
-    // Événements du clavier
-    const onKeyDown = function ( event ) {
-
-      switch ( event.code ) {
-
-        case 'ArrowUp':
-        case 'KeyW':
-          moveForward = true;
-          break;
-
-        case 'ArrowLeft':
-        case 'KeyA':
-          moveLeft = true;
-          break;
-
-        case 'ArrowDown':
-        case 'KeyS':
-          moveBackward = true;
-          break;
-
-        case 'ArrowRight':
-        case 'KeyD':
-          moveRight = true;
-          break;
-
-        case 'Space':
-          if ( canJump === true ) velocity.y += 150;
-          canJump = false;
-          break;
-
-      }
-
-    };
-
-    const onKeyUp = function ( event ) {
-
-      switch ( event.code ) {
-
-        case 'ArrowUp':
-        case 'KeyW':
-          moveForward = false;
-          break;
-
-        case 'ArrowLeft':
-        case 'KeyA':
-          moveLeft = false;
-          break;
-
-        case 'ArrowDown':
-        case 'KeyS':
-          moveBackward = false;
-          break;
-
-        case 'ArrowRight':
-        case 'KeyD':
-          moveRight = false;
-          break;
-
-      }
-
-    };
-
-    document.addEventListener( 'keydown', onKeyDown );
-    document.addEventListener( 'keyup', onKeyUp );
+  environmentSetup(scene);
+      
+  // Le sol
+  let floorGeometry = new THREE.PlaneGeometry(2000, 2000, 1, 1);
+  floorGeometry.rotateX(-Math.PI / 2);
+  const floorMaterial = new THREE.MeshBasicMaterial();
+  floorMaterial.visible = false;
+  const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+  floor.receiveShadow = true;
+  scene.add(floor);
 
     // Création du raycaster pour détecter le sol
     raycaster = new THREE.Raycaster( new THREE.Vector3(), new THREE.Vector3( 0, - 1, 0 ), 0, 10 );
 
     // === Chargement du modèle GLB ===
-    loader.load('Logo.glb', (gltf) => {
-        logo = gltf.scene;
-        logo.traverse((child) => {
-            if (child.isMesh) {
-                const textureLoader = new THREE.TextureLoader();
-                const normalMap = textureLoader.load('normal_map.png'); // Normal map
-
-                child.material = new THREE.MeshStandardMaterial({
-                    normalMap: normalMap,
-                    roughness: 0.5,
-                    metalness: 0.5,
-                });
-            }
-        });
-        logo.position.set(0, 10, -4); // Position fixe, ne dépend plus de la caméra
-        
-        scene.add(logo);
+    loader.load('assets/Hlw0.1.glb', (gltf) => {
+      hallway = gltf.scene;
+      hallway.traverse((child) => {
+        if (child.isMesh) {
+          child.receiveShadow = true;
+          child.material.normalMap = null;
+          child.material.onBeforeCompile=function(shader){
+            shader.fragmentShader= shader.fragmentShader.replace('#include <roughnessmap_fragment>',
+            THREE.ShaderChunk.roughnessmap_fragment.replace('texelRoughness =', 'texelRoughness = 1. -'))
+          }
+        }
+      });
+      hallway.receiveShadow = true;
+      hallway.rotateY(-Math.PI / 2);
+      hallway.position.set(0, 0, -13);
+      scene.add(hallway);
     }, undefined, (error) => {
-        console.error('Erreur lors du chargement du logo :', error);
+      console.error('Erreur lors du chargement du hallway :', error);
     });
 
+    const light = new THREE.PointLight(0xffeacc, 1, 0, 2);
+    const lightBoxGeometry = new THREE.BoxGeometry(0.5, 0.1, 0.5);
+    const lightBoxMaterial = new THREE.MeshStandardMaterial({ color: 0xffeacc, emissive: 0xffeacc, emissiveIntensity: 0.5 });
+    const lightBox = new THREE.Mesh(lightBoxGeometry, lightBoxMaterial);
+    lightBox.castShadow = true;
+
+    for (let i = 0; i < 6; i++) {
+        const lightInstance = light.clone();
+        const lightBoxInstance = lightBox.clone();
+        lightInstance.position.set(0, 2.4, -i * 5);
+        lightInstance.castShadow = true;
+        scene.add(lightInstance);
+        lightInstance.add(lightBoxInstance);
+        lightBoxInstance.position.set(0, 0.1, 0);
+    }
+
+    const farPlaneGeometry = new THREE.PlaneGeometry(2000, 2000, 1, 1);
+    const farPlaneMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+    const farPlane = new THREE.Mesh(farPlaneGeometry, farPlaneMaterial);
+    farPlane.position.set(0, 0, -100);
+    scene.add(farPlane);
+
+    const magicPlaneGeometry = new THREE.PlaneGeometry(6, 6, 1, 1);
+    const magicPlaneMaterial = new THREE.MeshBasicMaterial({
+      colorWrite: false,
+    });
+    const magicPlane = new THREE.Mesh(magicPlaneGeometry, magicPlaneMaterial);
+    magicPlane.position.set(0, 1, -28.1);
+    magicPlane.rotateY(Math.PI);
+    scene.add(magicPlane);
+
+    const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    const testCube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+    testCube.position.set(1, 1, 0);
+    testCube.castShadow = true;
+    scene.add(testCube);
    
     // === Initialisation du renderer ===
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({
+      powerPreference: "high-performance",
+      antialias: true
+    });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.BasicShadowMap;
     document.body.appendChild(renderer.domElement);
+
+    // === Tone Mapping ===
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+
+    const controls = new ImmersiveControls(camera, renderer, scene, { initialPosition: new THREE.Vector3(0, playerHeight, 0), showEnterVRButton: false, showExitVRButton: false });
 
     // === Activer le mode VR ===
     renderer.xr.enabled = true;
@@ -209,63 +126,16 @@ scene.add(floor);
 }
 
 function onWindowResize() {
- camera.aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 
   renderer.setSize( window.innerWidth, window.innerHeight );
-
 }
 
 function animate() {
+  stats.begin();
+  controls.update();
 
-  const time = performance.now();
-
-  if ( controls.isLocked === true ) {
-
-    raycaster.ray.origin.copy( controls.object.position );
-    raycaster.ray.origin.y -= 10;
-
-    const intersections = raycaster.intersectObjects( objects, false );
-
-    const onObject = intersections.length > 0;
-
-    const delta = ( time - prevTime ) / 1000;
-
-    velocity.x -= velocity.x * 10.0 * delta;
-    velocity.z -= velocity.z * 10.0 * delta;
-
-    velocity.y -= 7 * 100.0 * delta; // 100.0 = mass
-
-    direction.z = Number( moveForward ) - Number( moveBackward );
-    direction.x = Number( moveRight ) - Number( moveLeft );
-    direction.normalize(); // this ensures consistent movements in all directions
-
-    if ( moveForward || moveBackward ) velocity.z -= direction.z * 15.0 * delta; // valeur pour ralentir le mouvement
-    if ( moveLeft || moveRight ) velocity.x -= direction.x * 15.0 * delta; // cette valeur pour ralentir le mouvement
-
-    if ( onObject === true ) {
-
-      velocity.y = Math.max( 0, velocity.y );
-      canJump = true;
-
-    }
-
-    controls.moveRight( - velocity.x * delta );
-    controls.moveForward( - velocity.z * delta );
-
-    controls.object.position.y += ( velocity.y * delta ); // new behavior
-
-    if ( controls.object.position.y < 10 ) {
-
-      velocity.y = 0;
-      controls.object.position.y = 10;
-
-      canJump = true;
-
-    }
-  }
-
-  prevTime = time;
-
-  renderer.render( scene, camera );
+  renderer.render(scene, camera);
+  stats.end();
 }
