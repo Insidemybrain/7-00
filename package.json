@@ -10,11 +10,10 @@
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^1.1.0",
-    "prettier": "^3.4.2",
-    "three": "^0.171.0",
+    "three": "^0.172.0",
     "vite": "^5.4.11"
   },
   "dependencies": {
-    "@pmndrs/vanilla": "^1.20.2"
+    "@depasquale/three-immersive-controls": "^0.0.17"
   }
 }
