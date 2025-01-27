@@ -1,198 +1,140 @@
-import * as THREE from "three";
-import { VRButton } from "three/addons/webxr/VRButton.js";
-import Stats from "three/examples/jsm/libs/stats.module";
-import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { environmentSetup } from './environment';
+import Stats from 'three/examples/jsm/libs/stats.module';
+import ImmersiveControls from '@depasquale/three-immersive-controls';
 
-import { environmentSetup, sky } from "./environment";
-import { scene1 } from "./scene1";
-import { scene2, animateScene2 } from "./scene2";
+let camera, scene, renderer, hallway, stats;
+const objects = [];
 
+const loader = new GLTFLoader();
 const playerHeight = 1.6;
 
-let clock = new THREE.Clock();
-
-const moveState = {
-    forward: false,
-    backward: false,
-    left: false,
-    right: false,
-};
-const velocity = new THREE.Vector3();
-const moveSpeed = 5;
-
-const stats = Stats();
-document.body.appendChild(stats.dom);
-
-const renderer = new THREE.WebGLRenderer({
-    antialias: true,
-});
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
-renderer.setClearColor(0xffff00);
-
-renderer.shadowMap.enabled = false;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.25;
-
-const scene = new THREE.Scene();
-
-const camera = new THREE.PerspectiveCamera(
-    75,
-    window.innerWidth / window.innerHeight,
-    0.01,
-    2000,
-);
-
-const dolly = new THREE.Object3D();
-dolly.position.set(0, playerHeight, 0);
-dolly.add(camera);
-scene.add(dolly);
-
-const dummyCam = new THREE.Object3D();
-camera.add(dummyCam);
-
-const controls = new PointerLockControls(dolly, document.body);
-document.addEventListener("click", () => {
-    controls.lock();
-});
-scene.add(controls.getObject());
-
-document.addEventListener("keydown", onKeyDown, false);
-document.addEventListener("keyup", onKeyUp, false);
-
-/* const hemiLight = new THREE.HemisphereLight(0x80caff, 0x3b2e4a, 10);
-scene.add(hemiLight); */
-
 init();
-setupXR();
-renderer.setAnimationLoop(animate);
-window.addEventListener("resize", onWindowResize);
 
 function init() {
-    environmentSetup(scene);
-    scene1(scene, 0);
-    scene2(scene, 25); // 25
-}
+  stats = Stats();
+  document.body.appendChild(stats.dom);
 
-function setupXR() {
-    renderer.xr.enabled = true;
-    renderer.xr.setFramebufferScaleFactor(2.0);
-    document.body.appendChild(VRButton.createButton(renderer));
+  // === Configuration de la caméra ===
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 200);
+  camera.position.y = playerHeight;
 
-    const controller = renderer.xr.getController(0);
-    dolly.add(controller);
-    controller.addEventListener("selectstart", onSelectStart);
-    controller.addEventListener("selectend", onSelectEnd);
-    scene.add(controller);
+  // === Création de la scène ===
+  scene = new THREE.Scene();
+  environmentSetup(scene);
 
-    const controllerGrip = renderer.xr.getControllerGrip(0);
-    scene.add(controllerGrip);
-}
+  // === Chargement du modèle GLB ===
+  loader.load('assets/Hlw0.1.glb', (gltf) => {
+    hallway = gltf.scene;
+    hallway.traverse((child) => {
+      if (child.isMesh) {
+        child.receiveShadow = true;
+        child.material.normalMap = null;
+        child.material.onBeforeCompile = function (shader) {
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <roughnessmap_fragment>',
+            THREE.ShaderChunk.roughnessmap_fragment.replace('texelRoughness =', 'texelRoughness = 1. -')
+          );
+        };
+      }
+    });
+    hallway.receiveShadow = true;
+    hallway.rotateY(-Math.PI / 2);
+    hallway.position.set(0, 0, -13);
+    scene.add(hallway);
+  }, undefined, (error) => {
+    console.error('Erreur lors du chargement du hallway :', error);
+  });
 
-function onSelectStart() {
-    this.userData.selectPressed = true;
-}
+  // === Ajouter des lumières ===
+  const light = new THREE.PointLight(0xffeacc, 1, 0, 2);
+  const lightBoxGeometry = new THREE.BoxGeometry(0.5, 0.1, 0.5);
+  const lightBoxMaterial = new THREE.MeshStandardMaterial({ color: 0xffeacc, emissive: 0xffeacc, emissiveIntensity: 0.5 });
+  const lightBox = new THREE.Mesh(lightBoxGeometry, lightBoxMaterial);
+  lightBox.castShadow = true;
 
-function onSelectEnd() {
-    this.userData.selectPressed = false;
+  for (let i = 0; i < 6; i++) {
+    const lightInstance = light.clone();
+    const lightBoxInstance = lightBox.clone();
+    lightInstance.position.set(0, 2.4, -i * 5);
+    lightInstance.castShadow = true;
+    scene.add(lightInstance);
+    lightInstance.add(lightBoxInstance);
+    lightBoxInstance.position.set(0, 0.1, 0);
+  }
+
+  // === Création du plan de fond ===
+  const farPlaneGeometry = new THREE.PlaneGeometry(2000, 2000, 1, 1);
+  const farPlaneMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+  const farPlane = new THREE.Mesh(farPlaneGeometry, farPlaneMaterial);
+  farPlane.position.set(0, 0, -100);
+  scene.add(farPlane);
+
+  // === Initialisation du renderer ===
+  renderer = new THREE.WebGLRenderer({
+    powerPreference: "high-performance",
+    antialias: true
+  });
+
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.BasicShadowMap;
+  document.body.appendChild(renderer.domElement);
+
+  // === Tone Mapping ===
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+
+  // === Contrôles de caméra ===
+  const controls = new ImmersiveControls(camera, renderer, scene, {
+    initialPosition: new THREE.Vector3(0, playerHeight, 0),
+    showEnterVRButton: false,
+    showExitVRButton: true,
+    keyboardControls: true, // Active les contrôles clavier
+    vrControls: true,
+    collisionsEnabled: true,
+    mouseControls: false, // Désactive les contrôles souris par défaut dans ImmersiveControls
+  });
+
+  // === Activer le mode VR ===
+  renderer.xr.enabled = true;
+  document.body.appendChild(VRButton.createButton(renderer));
+
+  renderer.setAnimationLoop(animate);
+  window.addEventListener('resize', onWindowResize);
+
+  // Écoute des événements de la souris
+  window.addEventListener('mousemove', onMouseMove);
 }
 
 function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-function onKeyDown(event) {
-    switch (event.code) {
-        case "KeyW":
-        case "ArrowUp":
-            moveState.forward = true;
-            break;
-        case "KeyS":
-        case "ArrowDown":
-            moveState.backward = true;
-            break;
-        case "KeyA":
-        case "ArrowLeft":
-            moveState.left = true;
-            break;
-        case "KeyD":
-        case "ArrowRight":
-            moveState.right = true;
-            break;
-    }
-}
+let mouseX = 0;
+let mouseY = 0;
+let mouseSensitivity = 0.002; // Sensibilité de la souris
 
-function onKeyUp(event) {
-    switch (event.code) {
-        case "KeyW":
-        case "ArrowUp":
-            moveState.forward = false;
-            break;
-        case "KeyS":
-        case "ArrowDown":
-            moveState.backward = false;
-            break;
-        case "KeyA":
-        case "ArrowLeft":
-            moveState.left = false;
-            break;
-        case "KeyD":
-        case "ArrowRight":
-            moveState.right = false;
-            break;
-    }
-}
-
-function handleController(controller, dt) {
-    if (controller.userData.selectPressed) {
-        const speed = 2;
-        const quaternion = dolly.quaternion.clone();
-        dolly.quaternion.copy(
-            camera.getWorldQuaternion(new THREE.Quaternion()),
-        );
-        dolly.translateZ(dt * -speed);
-        dolly.position.y = 0;
-        dolly.quaternion.copy(quaternion);
-    }
+// Fonction pour gérer le mouvement de la souris (rotation de la caméra)
+function onMouseMove(event) {
+  mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+  mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
 }
 
 function animate() {
-    stats.update();
-    if (scene && camera) {
-        renderer.render(scene, camera);
-    }
+  stats.begin();
 
-    animateScene2();
+  // Rotation de la caméra selon la souris
+  camera.rotation.y += mouseX * mouseSensitivity;
+  camera.rotation.x += mouseY * mouseSensitivity;
+  camera.rotation.x = Math.max(Math.min(camera.rotation.x, Math.PI / 2), -Math.PI / 2); // Limite de la rotation sur l'axe X
 
-    const dt = clock.getDelta();
-
-    if (controls.isLocked) {
-        velocity.set(0, 0, 0);
-
-        if (moveState.forward) velocity.z -= moveSpeed * dt;
-        if (moveState.backward) velocity.z += moveSpeed * dt;
-        if (moveState.left) velocity.x -= moveSpeed * dt;
-        if (moveState.right) velocity.x += moveSpeed * dt;
-
-        controls.moveRight(velocity.x);
-        controls.moveForward(-velocity.z);
-    }
-
-    const controller = renderer.xr.getController(0);
-    if (controller) handleController(controller, dt);
-
-    if (dolly.position.z < -57 - 25) {
-        dolly.position.y = dolly.position.y - 1;
-        if (dolly.position.z < -57 - 25) {
-            dolly.position.z = -57.5 - 25;
-        }
-    }
+  controls.update();
+  renderer.render(scene, camera);
+  stats.end();
 }
-
-animate();
