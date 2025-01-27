@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 
-let orb, chair;
+let orb;
 const clock = new THREE.Clock();
 
 export const scene2 = async (scene, posZ) => {
@@ -9,27 +9,11 @@ export const scene2 = async (scene, posZ) => {
     sceneEmpty.position.set(0, 0, -posZ - 25);
     scene.add(sceneEmpty);
 
-    const light = new THREE.DirectionalLight(0xebfffe, 4);
-    /* scene.add(new THREE.DirectionalLightHelper(light, 5)); */
-    light.position.set(0, 40, -100);
-    light.castShadow = true;
-    light.shadow.mapSize.set(64, 2048);
-    light.shadow.camera.top = 100;
-    light.shadow.camera.bottom = -100;
-    light.shadow.camera.far = 161;
-    light.shadow.camera.near = 50;
-    sceneEmpty.add(light);
+    const GLTLoader = new GLTFLoader();
+    const TXTRLoader = new THREE.TextureLoader();
 
-    const loader = new GLTFLoader();
-
-    loader.load("assets/Mountains.glb", (gltf) => {
+    GLTLoader.load("assets/Mountains.glb", (gltf) => {
         const mountain = gltf.scene;
-        mountain.traverse((child) => {
-            if (child.isMesh) {
-                child.material.normalMap = null;
-            }
-        });
-        mountain.rotateY(-Math.PI / 2);
         mountain.position.set(0, -200, 0);
         sceneEmpty.add(mountain);
 
@@ -55,14 +39,24 @@ export const scene2 = async (scene, posZ) => {
         sheen: 1,
         sheenRoughness: 0.4,
         sheenColor: 0xffffff,
+        emissive: 0xe6fff2,
+        emissiveIntensity: 0.1,
     });
     orb = new THREE.Mesh(orbGeometry, orbMaterial);
     orb.position.set(0, 7, 0);
     orb.castShadow = true;
     sceneEmpty.add(orb);
 
+    const light = new THREE.PointLight(0xe6fff2, 100, 0, 3);
+    const lightHelper = new THREE.PointLightHelper(light);
+    light.position.set(0, 2, -5);
+    orb.add(light);
+
     const groundGeometry = new THREE.BoxGeometry(0.3, 50, 0.2);
-    const groundMaterial = new THREE.MeshStandardMaterial({});
+    const groundMaterial = new THREE.MeshStandardMaterial({
+        emissive: 0xe6fff2,
+        emissiveIntensity: 0.05,
+    });
     const ground = new THREE.Mesh(groundGeometry, groundMaterial);
     ground.rotateX(-Math.PI / 2);
     ground.position.set(0, -0.1, 0);
@@ -81,27 +75,26 @@ export const scene2 = async (scene, posZ) => {
     door.castShadow = true;
     sceneEmpty.add(door);
 
-    loader.load("assets/Chair.glb", (gltf) => {
+    let chair;
+    GLTLoader.load("assets/Chair.glb", (gltf) => {
         chair = gltf.scene;
         chair.traverse((child) => {
             if (child.isMesh) {
                 child.material.normalMap = null;
                 child.material.color = new THREE.Color(0xffffff);
-                child.material.emissive = new THREE.Color(0xffffff);
-                child.material.emissiveIntensity = 0.5;
             }
         });
         chair.position.set(0, 0, -32);
         chair.rotateY((Math.PI / 4) * 4.5);
-        /* chair.rotateZ(Math.PI / 10);
-        chair.rotateX(-Math.PI / 10); */
         sceneEmpty.add(chair);
+
+        const chairLight = new THREE.PointLight(0xffffff, 5, 0, 3);
+        const chairLightHelper = new THREE.PointLightHelper(chairLight);
+        chairLight.position.set(0, 1, 0.5);
+        chair.add(chairLight);
     });
 };
 
 export const animateScene2 = () => {
     orb.position.y = Math.sin(clock.getElapsedTime() / 2) + 7;
-    /* if (chair) {
-        chair.position.y = Math.sin(clock.getElapsedTime() + 450 / 4) / 4 + 0.5;
-    } */
 };

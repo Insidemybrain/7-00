@@ -16,12 +16,13 @@ export function environmentSetup(scene) {
     uniforms["mieCoefficient"].value = 0.005;
     uniforms["mieDirectionalG"].value = 0.7;
 
-    const phi = THREE.MathUtils.degToRad(90 - 30); // Elevation as second number
+    const phi = THREE.MathUtils.degToRad(90 - 1); // Elevation as second number
     const theta = THREE.MathUtils.degToRad(180); // Azimuth
 
     sun.setFromSphericalCoords(1, phi, theta);
 
     uniforms["sunPosition"].value.copy(sun);
 
-    scene.fog = new THREE.FogExp2(0xf0f3f5, 0.003);
+    /* scene.fog = new THREE.FogExp2(0xf0f3f5, 0.003); */
+    scene.fog = new THREE.FogExp2(0x333130, 0.003);
 }

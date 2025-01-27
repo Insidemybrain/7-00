@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { VRButton } from "three/examples/jsm/webxr/VRButton";
-import Stats from "three/examples/jsm/libs/stats.module";
 
 const container = document.createElement("div");
 document.body.appendChild(container);
@@ -25,11 +24,7 @@ renderer.setClearColor(0xffffff);
 
 container.appendChild(renderer.domElement);
 
-const stats = new Stats();
-document.body.appendChild(stats.dom);
-
 const dolly = new THREE.Object3D();
-/* dolly.position.z = 5; */
 dolly.add(camera);
 scene.add(dolly);
 
@@ -69,22 +64,10 @@ function handleController(controller, dt) {
     }
 }
 
-function resize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-window.addEventListener("resize", resize);
-
 function render() {
     const dt = clock.getDelta();
-    stats.update();
     if (controller) handleController(controller, dt);
     renderer.render(scene, camera);
-    console.log(dolly.position);
 }
 
 renderer.setAnimationLoop(render);
-
-export { renderer, scene, camera };

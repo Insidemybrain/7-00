@@ -31,11 +31,11 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 renderer.setClearColor(0xffff00);
 
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = false;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-/* renderer.toneMappingExposure = 0.5; */
+renderer.toneMappingExposure = 0.25;
 
 const scene = new THREE.Scene();
 
@@ -50,6 +50,9 @@ const dolly = new THREE.Object3D();
 dolly.position.set(0, playerHeight, 0);
 dolly.add(camera);
 scene.add(dolly);
+
+const dummyCam = new THREE.Object3D();
+camera.add(dummyCam);
 
 const controls = new PointerLockControls(dolly, document.body);
 document.addEventListener("click", () => {
@@ -71,16 +74,30 @@ window.addEventListener("resize", onWindowResize);
 function init() {
     environmentSetup(scene);
     scene1(scene, 0);
-    scene2(scene, 28); // 28
+    scene2(scene, 25); // 25
 }
 
 function setupXR() {
     renderer.xr.enabled = true;
-    renderer.xr.addEventListener("sessionstart", () => {
-        dolly.position.y = 0;
-    });
     renderer.xr.setFramebufferScaleFactor(2.0);
     document.body.appendChild(VRButton.createButton(renderer));
+
+    const controller = renderer.xr.getController(0);
+    dolly.add(controller);
+    controller.addEventListener("selectstart", onSelectStart);
+    controller.addEventListener("selectend", onSelectEnd);
+    scene.add(controller);
+
+    const controllerGrip = renderer.xr.getControllerGrip(0);
+    scene.add(controllerGrip);
+}
+
+function onSelectStart() {
+    this.userData.selectPressed = true;
+}
+
+function onSelectEnd() {
+    this.userData.selectPressed = false;
 }
 
 function onWindowResize() {
@@ -132,6 +149,19 @@ function onKeyUp(event) {
     }
 }
 
+function handleController(controller, dt) {
+    if (controller.userData.selectPressed) {
+        const speed = 2;
+        const quaternion = dolly.quaternion.clone();
+        dolly.quaternion.copy(
+            camera.getWorldQuaternion(new THREE.Quaternion()),
+        );
+        dolly.translateZ(dt * -speed);
+        dolly.position.y = 0;
+        dolly.quaternion.copy(quaternion);
+    }
+}
+
 function animate() {
     stats.update();
     if (scene && camera) {
@@ -140,29 +170,27 @@ function animate() {
 
     animateScene2();
 
-    /* if (dolly.position.z > -28) {
-        hemiLight.intensity = 0;
-    } else {
-        hemiLight.intensity = 10;
-    } */
+    const dt = clock.getDelta();
 
     if (controls.isLocked) {
-        let delta = clock.getDelta();
         velocity.set(0, 0, 0);
 
-        if (moveState.forward) velocity.z -= moveSpeed * delta;
-        if (moveState.backward) velocity.z += moveSpeed * delta;
-        if (moveState.left) velocity.x -= moveSpeed * delta;
-        if (moveState.right) velocity.x += moveSpeed * delta;
+        if (moveState.forward) velocity.z -= moveSpeed * dt;
+        if (moveState.backward) velocity.z += moveSpeed * dt;
+        if (moveState.left) velocity.x -= moveSpeed * dt;
+        if (moveState.right) velocity.x += moveSpeed * dt;
 
         controls.moveRight(velocity.x);
         controls.moveForward(-velocity.z);
     }
 
-    if (dolly.position.z < -56 - 28) {
+    const controller = renderer.xr.getController(0);
+    if (controller) handleController(controller, dt);
+
+    if (dolly.position.z < -57 - 25) {
         dolly.position.y = dolly.position.y - 1;
-        if (dolly.position.z < -56 - 28) {
-            dolly.position.z = -56.5 - 28;
+        if (dolly.position.z < -57 - 25) {
+            dolly.position.z = -57.5 - 25;
         }
     }
 }

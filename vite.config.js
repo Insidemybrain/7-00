@@ -10,4 +10,5 @@ export default defineConfig({
     optimizeDeps: {
         include: ["three/webgpu"],
     },
+    base: "/backrooms/",
 });
