@@ -1,5 +1,5 @@
 # backrooms
- 
+
 TODO: Add camera rig create obj invisble and parenting camera
 
 TODO: Apply movement to camera rig
